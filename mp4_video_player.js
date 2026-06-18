@@ -8,10 +8,15 @@ const playIcon = document.getElementById('playIcon');
 const playLabel = document.getElementById('playLabel');
 const seekBackBtn = document.getElementById('seekBackBtn');
 const seekForwardBtn = document.getElementById('seekForwardBtn');
+const frameStepInput = document.getElementById('frameStepInput');
+const extractFramesBtn = document.getElementById('extractFramesBtn');
+const extractStatus = document.getElementById('extractStatus');
 const progressFill = document.getElementById('progressFill');
 const progressWrap = document.getElementById('progressWrap');
 const timeDisplay = document.getElementById('timeDisplay');
 const fileName = document.getElementById('fileName');
+const framesToExtract = 10;
+let extractionInProgress = false;
 
 function loadFile(file) {
   if (!file || !file.type.startsWith('video/')) return;
@@ -20,6 +25,7 @@ function loadFile(file) {
   fileName.textContent = file.name;
   dropZone.classList.add('hidden');
   videoContainer.classList.add('visible');
+  setExtractStatus('');
   setPlayState(false);
 }
 
@@ -44,11 +50,201 @@ function fmt(s) {
   return m + ':' + sec;
 }
 
+function setExtractStatus(message) {
+  extractStatus.textContent = message;
+}
+
+function getSafeBaseName(name) {
+  return (name || 'frame').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9가-힣_-]+/g, '_');
+}
+
+function waitForEvent(target, eventName) {
+  return new Promise(resolve => {
+    const handler = () => {
+      target.removeEventListener(eventName, handler);
+      resolve();
+    };
+    target.addEventListener(eventName, handler);
+  });
+}
+
+function canvasToBlob(canvas) {
+  return new Promise(resolve => {
+    canvas.toBlob(blob => resolve(blob), 'image/png');
+  });
+}
+
+function triggerDownload(blob, fileNameText) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileNameText;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function captureFrameToBlob(canvas, context) {
+  context.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+  return canvasToBlob(canvas);
+}
+
+async function extractFramesByPlayback(stepFrames) {
+  const canvas = document.createElement('canvas');
+  canvas.width = videoEl.videoWidth;
+  canvas.height = videoEl.videoHeight;
+  const context = canvas.getContext('2d', { willReadFrequently: false });
+
+  if (!canvas.width || !canvas.height || !context) {
+    throw new Error('비디오 해상도를 확인할 수 없습니다.');
+  }
+
+  const baseName = getSafeBaseName(fileName.textContent || 'frame');
+  const wasMuted = videoEl.muted;
+  const wasPlaying = !videoEl.paused;
+  const startTime = videoEl.currentTime;
+  let capturedCount = 0;
+  let frameIndex = 0;
+
+  videoEl.muted = true;
+  setPlayState(true);
+
+  if (videoEl.paused) {
+    await videoEl.play();
+  }
+
+  try {
+    while (capturedCount < framesToExtract) {
+      await new Promise(resolve => {
+        if (typeof videoEl.requestVideoFrameCallback === 'function') {
+          videoEl.requestVideoFrameCallback(() => resolve());
+        } else {
+          requestAnimationFrame(() => resolve());
+        }
+      });
+
+      if (frameIndex % stepFrames === 0) {
+        const blob = await captureFrameToBlob(canvas, context);
+        if (blob) {
+          const sequence = String(capturedCount + 1).padStart(2, '0');
+          triggerDownload(blob, `${baseName}_${sequence}.png`);
+          capturedCount += 1;
+          setExtractStatus(`${capturedCount}/${framesToExtract}장 추출 중...`);
+        }
+      }
+
+      frameIndex += 1;
+
+      if (videoEl.ended) {
+        break;
+      }
+    }
+  } finally {
+    videoEl.pause();
+    videoEl.currentTime = startTime;
+    videoEl.muted = wasMuted;
+    if (wasPlaying) {
+      await videoEl.play();
+    }
+  }
+
+  return capturedCount;
+}
+
+async function extractFramesBySeeking(stepFrames) {
+  const canvas = document.createElement('canvas');
+  canvas.width = videoEl.videoWidth;
+  canvas.height = videoEl.videoHeight;
+  const context = canvas.getContext('2d', { willReadFrequently: false });
+
+  if (!canvas.width || !canvas.height || !context) {
+    throw new Error('비디오 해상도를 확인할 수 없습니다.');
+  }
+
+  const baseName = getSafeBaseName(fileName.textContent || 'frame');
+  const wasMuted = videoEl.muted;
+  const wasPlaying = !videoEl.paused;
+  const startTime = videoEl.currentTime;
+  const assumedFps = 30;
+  const frameIntervalSeconds = stepFrames / assumedFps;
+  let capturedCount = 0;
+
+  videoEl.muted = true;
+
+  try {
+    for (let i = 0; i < framesToExtract; i += 1) {
+      if (i > 0) {
+        const targetTime = Math.min(videoEl.duration || startTime, startTime + (i * frameIntervalSeconds));
+        const seeked = waitForEvent(videoEl, 'seeked');
+        videoEl.currentTime = targetTime;
+        await seeked;
+      }
+      const blob = await captureFrameToBlob(canvas, context);
+      if (blob) {
+        const sequence = String(i + 1).padStart(2, '0');
+        triggerDownload(blob, `${baseName}_${sequence}.png`);
+        capturedCount += 1;
+        setExtractStatus(`${capturedCount}/${framesToExtract}장 추출 중...`);
+      }
+    }
+  } finally {
+    videoEl.currentTime = startTime;
+    videoEl.muted = wasMuted;
+    if (wasPlaying) {
+      await videoEl.play();
+    }
+  }
+
+  return capturedCount;
+}
+
+async function extractFrames() {
+  if (extractionInProgress) {
+    return;
+  }
+
+  const stepFrames = Number.parseInt(frameStepInput.value, 10);
+  if (!Number.isFinite(stepFrames) || stepFrames < 1) {
+    setExtractStatus('프레임 간격은 1 이상의 숫자여야 합니다.');
+    return;
+  }
+
+  if (!videoEl.src) {
+    setExtractStatus('먼저 비디오 파일을 선택해 주세요.');
+    return;
+  }
+
+  extractionInProgress = true;
+  extractFramesBtn.disabled = true;
+  frameStepInput.disabled = true;
+  setExtractStatus('프레임 추출을 시작합니다...');
+
+  try {
+    let capturedCount = 0;
+    if (typeof videoEl.requestVideoFrameCallback === 'function') {
+      capturedCount = await extractFramesByPlayback(stepFrames);
+    } else {
+      capturedCount = await extractFramesBySeeking(stepFrames);
+    }
+
+    setExtractStatus(`${capturedCount}개의 PNG를 다운로드했습니다.`);
+  } catch (error) {
+    setExtractStatus(error instanceof Error ? error.message : '프레임 추출에 실패했습니다.');
+  } finally {
+    extractionInProgress = false;
+    extractFramesBtn.disabled = false;
+    frameStepInput.disabled = false;
+  }
+}
+
 selectFileBtn.addEventListener('click', () => {
   fileInput.click();
 });
 
 fileInput.addEventListener('change', () => loadFile(fileInput.files[0]));
+
+extractFramesBtn.addEventListener('click', () => {
+  void extractFrames();
+});
 
 dropZone.addEventListener('dragover', e => {
   e.preventDefault();
@@ -68,10 +264,8 @@ dropZone.addEventListener('drop', e => {
 playPauseBtn.addEventListener('click', () => {
   if (videoEl.paused) {
     videoEl.play();
-    setPlayState(true);
   } else {
     videoEl.pause();
-    setPlayState(false);
   }
 });
 
@@ -84,6 +278,14 @@ seekForwardBtn.addEventListener('click', () => {
 });
 
 videoEl.addEventListener('ended', () => {
+  setPlayState(false);
+});
+
+videoEl.addEventListener('play', () => {
+  setPlayState(true);
+});
+
+videoEl.addEventListener('pause', () => {
   setPlayState(false);
 });
 
