@@ -88,6 +88,20 @@ async function captureFrameToBlob(canvas, context) {
   return canvasToBlob(canvas);
 }
 
+async function buildZipFromFrames(frames, baseName) {
+  if (typeof JSZip === 'undefined') {
+    throw new Error('ZIP 라이브러리를 불러오지 못했습니다.');
+  }
+
+  const zip = new JSZip();
+  frames.forEach(frame => {
+    zip.file(frame.name, frame.blob);
+  });
+
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  triggerDownload(zipBlob, `${baseName}_frames.zip`);
+}
+
 async function extractFramesByPlayback(stepFrames) {
   const canvas = document.createElement('canvas');
   canvas.width = videoEl.videoWidth;
@@ -104,6 +118,7 @@ async function extractFramesByPlayback(stepFrames) {
   const startTime = videoEl.currentTime;
   let capturedCount = 0;
   let frameIndex = 0;
+  const frames = [];
 
   videoEl.muted = true;
   setPlayState(true);
@@ -126,7 +141,7 @@ async function extractFramesByPlayback(stepFrames) {
         const blob = await captureFrameToBlob(canvas, context);
         if (blob) {
           const sequence = String(capturedCount + 1).padStart(2, '0');
-          triggerDownload(blob, `${baseName}_${sequence}.png`);
+          frames.push({ name: `${baseName}_${sequence}.png`, blob });
           capturedCount += 1;
           setExtractStatus(`${capturedCount}/${framesToExtract}장 추출 중...`);
         }
@@ -147,6 +162,7 @@ async function extractFramesByPlayback(stepFrames) {
     }
   }
 
+  await buildZipFromFrames(frames, baseName);
   return capturedCount;
 }
 
@@ -167,6 +183,7 @@ async function extractFramesBySeeking(stepFrames) {
   const assumedFps = 30;
   const frameIntervalSeconds = stepFrames / assumedFps;
   let capturedCount = 0;
+  const frames = [];
 
   videoEl.muted = true;
 
@@ -181,7 +198,7 @@ async function extractFramesBySeeking(stepFrames) {
       const blob = await captureFrameToBlob(canvas, context);
       if (blob) {
         const sequence = String(i + 1).padStart(2, '0');
-        triggerDownload(blob, `${baseName}_${sequence}.png`);
+        frames.push({ name: `${baseName}_${sequence}.png`, blob });
         capturedCount += 1;
         setExtractStatus(`${capturedCount}/${framesToExtract}장 추출 중...`);
       }
@@ -194,6 +211,7 @@ async function extractFramesBySeeking(stepFrames) {
     }
   }
 
+  await buildZipFromFrames(frames, baseName);
   return capturedCount;
 }
 
@@ -226,7 +244,7 @@ async function extractFrames() {
       capturedCount = await extractFramesBySeeking(stepFrames);
     }
 
-    setExtractStatus(`${capturedCount}개의 PNG를 다운로드했습니다.`);
+    setExtractStatus(`${capturedCount}개의 PNG를 ZIP으로 다운로드했습니다.`);
   } catch (error) {
     setExtractStatus(error instanceof Error ? error.message : '프레임 추출에 실패했습니다.');
   } finally {
