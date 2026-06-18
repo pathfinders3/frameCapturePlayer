@@ -1,6 +1,23 @@
 
 <style>
-  .player-wrap { padding: 1.5rem 0; max-width: 680px; }
+  html, body {
+    background: #0b1020;
+    color: #f3f6ff;
+  }
+  .player-wrap {
+    --color-background-primary: #111831;
+    --color-background-secondary: #1a2345;
+    --color-background-tertiary: #243261;
+    --color-text-primary: #f3f6ff;
+    --color-text-secondary: #b8c3ea;
+    --color-border-secondary: #445387;
+    --color-border-tertiary: #32416d;
+    padding: 1.5rem;
+    max-width: 680px;
+    border-radius: var(--border-radius-lg, 14px);
+    background: linear-gradient(180deg, #0f1733 0%, #0d1430 100%);
+    color: var(--color-text-primary);
+  }
   .drop-zone {
     border: 1.5px dashed var(--color-border-secondary);
     border-radius: var(--border-radius-lg);
