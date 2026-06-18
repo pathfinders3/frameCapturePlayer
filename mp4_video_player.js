@@ -9,6 +9,7 @@ const playLabel = document.getElementById('playLabel');
 const seekBackBtn = document.getElementById('seekBackBtn');
 const seekForwardBtn = document.getElementById('seekForwardBtn');
 const frameStepInput = document.getElementById('frameStepInput');
+const startTimeInput = document.getElementById('startTimeInput');
 const extractFramesBtn = document.getElementById('extractFramesBtn');
 const extractStatus = document.getElementById('extractStatus');
 const progressFill = document.getElementById('progressFill');
@@ -68,6 +69,18 @@ function waitForEvent(target, eventName) {
   });
 }
 
+async function setVideoTime(targetTime) {
+  const safeTime = Math.max(0, Math.min(targetTime, videoEl.duration || targetTime));
+  if (Math.abs(videoEl.currentTime - safeTime) < 0.01) {
+    return safeTime;
+  }
+
+  const seeked = waitForEvent(videoEl, 'seeked');
+  videoEl.currentTime = safeTime;
+  await seeked;
+  return safeTime;
+}
+
 function canvasToBlob(canvas) {
   return new Promise(resolve => {
     canvas.toBlob(blob => resolve(blob), 'image/png');
@@ -102,7 +115,7 @@ async function buildZipFromFrames(frames, baseName) {
   triggerDownload(zipBlob, `${baseName}_frames.zip`);
 }
 
-async function extractFramesByPlayback(stepFrames) {
+async function extractFramesByPlayback(stepFrames, startPosition) {
   const canvas = document.createElement('canvas');
   canvas.width = videoEl.videoWidth;
   canvas.height = videoEl.videoHeight;
@@ -115,19 +128,22 @@ async function extractFramesByPlayback(stepFrames) {
   const baseName = getSafeBaseName(fileName.textContent || 'frame');
   const wasMuted = videoEl.muted;
   const wasPlaying = !videoEl.paused;
-  const startTime = videoEl.currentTime;
+  const originalTime = videoEl.currentTime;
+  const safeStartTime = Math.max(0, Math.min(startPosition, Math.max(0, (videoEl.duration || startPosition) - 0.05)));
   let capturedCount = 0;
   let frameIndex = 0;
   const frames = [];
 
   videoEl.muted = true;
-  setPlayState(true);
-
-  if (videoEl.paused) {
-    await videoEl.play();
-  }
 
   try {
+    await setVideoTime(safeStartTime);
+    setPlayState(true);
+
+    if (videoEl.paused) {
+      await videoEl.play();
+    }
+
     while (capturedCount < framesToExtract) {
       await new Promise(resolve => {
         if (typeof videoEl.requestVideoFrameCallback === 'function') {
@@ -155,7 +171,7 @@ async function extractFramesByPlayback(stepFrames) {
     }
   } finally {
     videoEl.pause();
-    videoEl.currentTime = startTime;
+    videoEl.currentTime = originalTime;
     videoEl.muted = wasMuted;
     if (wasPlaying) {
       await videoEl.play();
@@ -166,7 +182,7 @@ async function extractFramesByPlayback(stepFrames) {
   return capturedCount;
 }
 
-async function extractFramesBySeeking(stepFrames) {
+async function extractFramesBySeeking(stepFrames, startPosition) {
   const canvas = document.createElement('canvas');
   canvas.width = videoEl.videoWidth;
   canvas.height = videoEl.videoHeight;
@@ -179,7 +195,8 @@ async function extractFramesBySeeking(stepFrames) {
   const baseName = getSafeBaseName(fileName.textContent || 'frame');
   const wasMuted = videoEl.muted;
   const wasPlaying = !videoEl.paused;
-  const startTime = videoEl.currentTime;
+  const originalTime = videoEl.currentTime;
+  const safeStartTime = Math.max(0, Math.min(startPosition, Math.max(0, (videoEl.duration || startPosition) - 0.05)));
   const assumedFps = 30;
   const frameIntervalSeconds = stepFrames / assumedFps;
   let capturedCount = 0;
@@ -188,12 +205,12 @@ async function extractFramesBySeeking(stepFrames) {
   videoEl.muted = true;
 
   try {
+    await setVideoTime(safeStartTime);
+
     for (let i = 0; i < framesToExtract; i += 1) {
       if (i > 0) {
-        const targetTime = Math.min(videoEl.duration || startTime, startTime + (i * frameIntervalSeconds));
-        const seeked = waitForEvent(videoEl, 'seeked');
-        videoEl.currentTime = targetTime;
-        await seeked;
+        const targetTime = safeStartTime + (i * frameIntervalSeconds);
+        await setVideoTime(targetTime);
       }
       const blob = await captureFrameToBlob(canvas, context);
       if (blob) {
@@ -204,7 +221,7 @@ async function extractFramesBySeeking(stepFrames) {
       }
     }
   } finally {
-    videoEl.currentTime = startTime;
+    videoEl.currentTime = originalTime;
     videoEl.muted = wasMuted;
     if (wasPlaying) {
       await videoEl.play();
@@ -226,6 +243,12 @@ async function extractFrames() {
     return;
   }
 
+  const startTime = Number.parseFloat(startTimeInput.value);
+  if (!Number.isFinite(startTime) || startTime < 0) {
+    setExtractStatus('시작 초는 0 이상의 숫자여야 합니다.');
+    return;
+  }
+
   if (!videoEl.src) {
     setExtractStatus('먼저 비디오 파일을 선택해 주세요.');
     return;
@@ -234,14 +257,15 @@ async function extractFrames() {
   extractionInProgress = true;
   extractFramesBtn.disabled = true;
   frameStepInput.disabled = true;
+  startTimeInput.disabled = true;
   setExtractStatus('프레임 추출을 시작합니다...');
 
   try {
     let capturedCount = 0;
     if (typeof videoEl.requestVideoFrameCallback === 'function') {
-      capturedCount = await extractFramesByPlayback(stepFrames);
+      capturedCount = await extractFramesByPlayback(stepFrames, startTime);
     } else {
-      capturedCount = await extractFramesBySeeking(stepFrames);
+      capturedCount = await extractFramesBySeeking(stepFrames, startTime);
     }
 
     setExtractStatus(`${capturedCount}개의 PNG를 ZIP으로 다운로드했습니다.`);
@@ -251,6 +275,7 @@ async function extractFrames() {
     extractionInProgress = false;
     extractFramesBtn.disabled = false;
     frameStepInput.disabled = false;
+    startTimeInput.disabled = false;
   }
 }
 
