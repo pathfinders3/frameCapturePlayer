@@ -326,6 +326,18 @@ seekForwardBtn.addEventListener('click', () => {
   seek(10);
 });
 
+document.addEventListener('keydown', e => {
+  if (!videoEl.src) return;
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    seek(-10);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    seek(10);
+  }
+});
+
 videoEl.addEventListener('ended', () => {
   setPlayState(false);
 });
