@@ -116,13 +116,14 @@
     border-radius: var(--border-radius-md);
     border: 0.5px solid var(--color-border-secondary);
     background: var(--color-background-primary);
-    color: var(--color-text-primary);
+    color: #f3f6ff;
     font-size: 13px;
     font-family: var(--font-sans);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.12s, transform 0.08s;
   }
+  .ctrl-btn i { color: inherit; }
   .ctrl-btn:hover { background: var(--color-background-secondary); }
   .ctrl-btn:active { transform: scale(0.97); }
   .ctrl-btn.play-pause {
@@ -169,11 +170,11 @@
       <div class="extract-field">
         <span class="extract-label">프레임 간격</span>
         <button class="ctrl-btn step-move-btn" id="stepMoveBackBtn" aria-label="프레임 간격만큼 뒤로 이동">
-          <i class="ti ti-chevron-left" style="font-size:15px;" aria-hidden="true"></i>
+          ←
         </button>
         <input class="extract-input" type="number" id="frameStepInput" min="1" value="5" aria-label="프레임 간격">
         <button class="ctrl-btn step-move-btn" id="stepMoveForwardBtn" aria-label="프레임 간격만큼 앞으로 이동">
-          <i class="ti ti-chevron-right" style="font-size:15px;" aria-hidden="true"></i>
+          →
         </button>
       </div>
       <div class="extract-field">
