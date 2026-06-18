@@ -8,6 +8,8 @@ const playIcon = document.getElementById('playIcon');
 const playLabel = document.getElementById('playLabel');
 const seekBackBtn = document.getElementById('seekBackBtn');
 const seekForwardBtn = document.getElementById('seekForwardBtn');
+const stepMoveBackBtn = document.getElementById('stepMoveBackBtn');
+const stepMoveForwardBtn = document.getElementById('stepMoveForwardBtn');
 const frameStepInput = document.getElementById('frameStepInput');
 const startTimeInput = document.getElementById('startTimeInput');
 const relativeStartToggle = document.getElementById('relativeStartToggle');
@@ -62,6 +64,16 @@ function fmt(s) {
 
 function setExtractStatus(message) {
   extractStatus.textContent = message;
+}
+
+function getStepSeconds() {
+  const stepFrames = Number.parseInt(frameStepInput.value, 10);
+  if (!Number.isFinite(stepFrames) || stepFrames < 1) {
+    setExtractStatus('프레임 간격은 1 이상의 숫자여야 합니다.');
+    return null;
+  }
+  const assumedFps = 30;
+  return stepFrames / assumedFps;
 }
 
 function getSafeBaseName(name) {
@@ -332,6 +344,20 @@ seekBackBtn.addEventListener('click', () => {
 
 seekForwardBtn.addEventListener('click', () => {
   seek(10, { preferFast: true });
+});
+
+stepMoveBackBtn.addEventListener('click', () => {
+  if (!videoEl.src) return;
+  const stepSeconds = getStepSeconds();
+  if (stepSeconds === null) return;
+  seek(-stepSeconds);
+});
+
+stepMoveForwardBtn.addEventListener('click', () => {
+  if (!videoEl.src) return;
+  const stepSeconds = getStepSeconds();
+  if (stepSeconds === null) return;
+  seek(stepSeconds);
 });
 
 document.addEventListener('keydown', e => {

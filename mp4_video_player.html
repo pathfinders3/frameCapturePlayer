@@ -96,6 +96,11 @@
   .extract-input:focus {
     border-color: var(--color-text-secondary);
   }
+  .step-move-btn {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+  }
   .extract-status {
     min-height: 18px;
     font-size: 12px;
@@ -163,7 +168,13 @@
     <div class="extract-controls">
       <div class="extract-field">
         <span class="extract-label">프레임 간격</span>
+        <button class="ctrl-btn step-move-btn" id="stepMoveBackBtn" aria-label="프레임 간격만큼 뒤로 이동">
+          <i class="ti ti-chevron-left" style="font-size:15px;" aria-hidden="true"></i>
+        </button>
         <input class="extract-input" type="number" id="frameStepInput" min="1" value="5" aria-label="프레임 간격">
+        <button class="ctrl-btn step-move-btn" id="stepMoveForwardBtn" aria-label="프레임 간격만큼 앞으로 이동">
+          <i class="ti ti-chevron-right" style="font-size:15px;" aria-hidden="true"></i>
+        </button>
       </div>
       <div class="extract-field">
         <span class="extract-label">시작 초</span>
