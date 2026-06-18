@@ -329,12 +329,13 @@ seekForwardBtn.addEventListener('click', () => {
 document.addEventListener('keydown', e => {
   if (!videoEl.src) return;
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  const delta = e.shiftKey ? 30 : 10;
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
-    seek(-10);
+    seek(-delta);
   } else if (e.key === 'ArrowRight') {
     e.preventDefault();
-    seek(10);
+    seek(delta);
   }
 });
 
