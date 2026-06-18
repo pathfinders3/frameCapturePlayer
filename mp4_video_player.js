@@ -10,6 +10,7 @@ const seekBackBtn = document.getElementById('seekBackBtn');
 const seekForwardBtn = document.getElementById('seekForwardBtn');
 const frameStepInput = document.getElementById('frameStepInput');
 const startTimeInput = document.getElementById('startTimeInput');
+const relativeStartToggle = document.getElementById('relativeStartToggle');
 const extractFramesBtn = document.getElementById('extractFramesBtn');
 const extractStatus = document.getElementById('extractStatus');
 const progressFill = document.getElementById('progressFill');
@@ -249,6 +250,9 @@ async function extractFrames() {
     return;
   }
 
+  const currentPosition = videoEl.currentTime;
+  const startPosition = relativeStartToggle.checked ? currentPosition + startTime : startTime;
+
   if (!videoEl.src) {
     setExtractStatus('먼저 비디오 파일을 선택해 주세요.');
     return;
@@ -258,14 +262,15 @@ async function extractFrames() {
   extractFramesBtn.disabled = true;
   frameStepInput.disabled = true;
   startTimeInput.disabled = true;
+  relativeStartToggle.disabled = true;
   setExtractStatus('프레임 추출을 시작합니다...');
 
   try {
     let capturedCount = 0;
     if (typeof videoEl.requestVideoFrameCallback === 'function') {
-      capturedCount = await extractFramesByPlayback(stepFrames, startTime);
+      capturedCount = await extractFramesByPlayback(stepFrames, startPosition);
     } else {
-      capturedCount = await extractFramesBySeeking(stepFrames, startTime);
+      capturedCount = await extractFramesBySeeking(stepFrames, startPosition);
     }
 
     setExtractStatus(`${capturedCount}개의 PNG를 ZIP으로 다운로드했습니다.`);
@@ -276,6 +281,7 @@ async function extractFrames() {
     extractFramesBtn.disabled = false;
     frameStepInput.disabled = false;
     startTimeInput.disabled = false;
+    relativeStartToggle.disabled = false;
   }
 }
 
