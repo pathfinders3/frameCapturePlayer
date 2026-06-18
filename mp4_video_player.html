@@ -92,7 +92,7 @@
     <i class="ti ti-file-type-mp4" style="font-size:40px; color:var(--color-text-secondary); display:block; margin-bottom:12px;" aria-hidden="true"></i>
     <p style="font-size:15px; font-weight:500; color:var(--color-text-primary); margin:0 0 6px;">MP4 파일을 여기에 드래그하거나</p>
     <p style="font-size:13px; color:var(--color-text-secondary); margin:0 0 16px;">클릭하여 파일을 선택하세요</p>
-    <button class="ctrl-btn" onclick="document.getElementById('fileInput').click()">
+    <button class="ctrl-btn" id="selectFileBtn">
       <i class="ti ti-upload" style="font-size:16px;" aria-hidden="true"></i> 파일 선택
     </button>
     <input type="file" id="fileInput" accept="video/mp4,video/*">
@@ -109,97 +109,14 @@
         <i class="ti ti-player-play" id="playIcon" style="font-size:16px;" aria-hidden="true"></i>
         <span id="playLabel">재생</span>
       </button>
-      <button class="ctrl-btn" onclick="seek(-10)" aria-label="10초 뒤로">
+      <button class="ctrl-btn" id="seekBackBtn" aria-label="10초 뒤로">
         <i class="ti ti-player-track-prev" style="font-size:15px;" aria-hidden="true"></i> -10초
       </button>
-      <button class="ctrl-btn" onclick="seek(10)" aria-label="10초 앞으로">
+      <button class="ctrl-btn" id="seekForwardBtn" aria-label="10초 앞으로">
         +10초 <i class="ti ti-player-track-next" style="font-size:15px;" aria-hidden="true"></i>
       </button>
       <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
     </div>
   </div>
 </div>
-
-<script>
-  const dropZone = document.getElementById('dropZone');
-  const fileInput = document.getElementById('fileInput');
-  const videoContainer = document.getElementById('videoContainer');
-  const videoEl = document.getElementById('videoEl');
-  const playPauseBtn = document.getElementById('playPauseBtn');
-  const playIcon = document.getElementById('playIcon');
-  const playLabel = document.getElementById('playLabel');
-  const progressFill = document.getElementById('progressFill');
-  const progressWrap = document.getElementById('progressWrap');
-  const timeDisplay = document.getElementById('timeDisplay');
-  const fileName = document.getElementById('fileName');
-
-  function loadFile(file) {
-    if (!file || !file.type.startsWith('video/')) return;
-    const url = URL.createObjectURL(file);
-    videoEl.src = url;
-    fileName.textContent = file.name;
-    dropZone.classList.add('hidden');
-    videoContainer.classList.add('visible');
-    setPlayState(false);
-  }
-
-  fileInput.addEventListener('change', () => loadFile(fileInput.files[0]));
-
-  dropZone.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropZone.style.background = 'var(--color-background-tertiary)';
-  });
-  dropZone.addEventListener('dragleave', () => {
-    dropZone.style.background = '';
-  });
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.style.background = '';
-    loadFile(e.dataTransfer.files[0]);
-  });
-
-  function setPlayState(playing) {
-    if (playing) {
-      playIcon.className = 'ti ti-player-pause';
-      playLabel.textContent = '일시정지';
-    } else {
-      playIcon.className = 'ti ti-player-play';
-      playLabel.textContent = '재생';
-    }
-  }
-
-  playPauseBtn.addEventListener('click', () => {
-    if (videoEl.paused) {
-      videoEl.play();
-      setPlayState(true);
-    } else {
-      videoEl.pause();
-      setPlayState(false);
-    }
-  });
-
-  videoEl.addEventListener('ended', () => setPlayState(false));
-
-  function seek(delta) {
-    videoEl.currentTime = Math.max(0, Math.min(videoEl.duration || 0, videoEl.currentTime + delta));
-  }
-
-  function fmt(s) {
-    if (isNaN(s)) return '0:00';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60).toString().padStart(2, '0');
-    return m + ':' + sec;
-  }
-
-  videoEl.addEventListener('timeupdate', () => {
-    const pct = videoEl.duration ? (videoEl.currentTime / videoEl.duration) * 100 : 0;
-    progressFill.style.width = pct.toFixed(2) + '%';
-    timeDisplay.textContent = fmt(videoEl.currentTime) + ' / ' + fmt(videoEl.duration);
-  });
-
-  progressWrap.addEventListener('click', e => {
-    const rect = progressWrap.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    if (videoEl.duration) videoEl.currentTime = ratio * videoEl.duration;
-  });
-</script>
+<script src="./mp4_video_player.js"></script>
