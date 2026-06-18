@@ -41,8 +41,16 @@ function setPlayState(playing) {
   }
 }
 
-function seek(delta) {
-  videoEl.currentTime = Math.max(0, Math.min(videoEl.duration || 0, videoEl.currentTime + delta));
+function seek(delta, options = {}) {
+  const { preferFast = false } = options;
+  const targetTime = Math.max(0, Math.min(videoEl.duration || 0, videoEl.currentTime + delta));
+
+  if (preferFast && typeof videoEl.fastSeek === 'function') {
+    videoEl.fastSeek(targetTime);
+    return;
+  }
+
+  videoEl.currentTime = targetTime;
 }
 
 function fmt(s) {
@@ -319,11 +327,11 @@ playPauseBtn.addEventListener('click', () => {
 });
 
 seekBackBtn.addEventListener('click', () => {
-  seek(-10);
+  seek(-10, { preferFast: true });
 });
 
 seekForwardBtn.addEventListener('click', () => {
-  seek(10);
+  seek(10, { preferFast: true });
 });
 
 document.addEventListener('keydown', e => {
@@ -332,10 +340,10 @@ document.addEventListener('keydown', e => {
   const delta = e.shiftKey ? 30 : 10;
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
-    seek(-delta);
+    seek(-delta, { preferFast: true });
   } else if (e.key === 'ArrowRight') {
     e.preventDefault();
-    seek(delta);
+    seek(delta, { preferFast: true });
   }
 });
 
