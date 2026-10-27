@@ -147,25 +147,47 @@ function formatFfmpegTime(value) {
   return iso === '00:00:00.000' ? '00:00:00.000' : iso;
 }
 
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} 시간 초과`)), ms))
+  ]);
+
 async function ensureFfmpeg() {
-  if (ffmpegInstance) {
-    return ffmpegInstance;
-  }
+  if (ffmpegInstance) return ffmpegInstance;
 
-  const { FFmpeg } = window;
-  if (!FFmpeg) {
-    throw new Error('FFmpeg를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
-  }
+  const FFmpegClass =
+    (window.FFmpegWASM && window.FFmpegWASM.FFmpeg)
+    || (window.FFmpeg && window.FFmpeg.FFmpeg)
+    || window.FFmpeg;
+  if (!FFmpegClass) throw new Error('FFmpeg를 불러오지 못했습니다.');
 
-  ffmpegInstance = new FFmpeg();
-  const coreBaseUrl = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
+  const ffmpegBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm';
+  const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
 
-  await ffmpegInstance.load({
-    coreURL: await toBlobUrl(`${coreBaseUrl}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobUrl(`${coreBaseUrl}/ffmpeg-core.wasm`, 'application/wasm')
-  });
+  // 같은 출처의 Blob module worker가 원격 worker.js를 import
+  const classWorkerURL = URL.createObjectURL(
+    new Blob([`import "${ffmpegBase}/worker.js";`], { type: 'text/javascript' })
+  );
 
-  return ffmpegInstance;
+  console.log('FFmpeg 파일 다운로드 시작');
+  const [coreURL, wasmURL] = await Promise.all([
+    toBlobUrl(`${coreBase}/ffmpeg-core.js`, 'text/javascript'),
+    toBlobUrl(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm')
+  ]);
+  console.log('다운로드 완료, load 시작');
+
+  const ff = new FFmpegClass();
+  ff.on('log', ({ message }) => console.log('[ffmpeg]', message));
+
+  await Promise.race([
+    ff.load({ classWorkerURL, coreURL, wasmURL }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('FFmpeg 로드 시간 초과')), 60000))
+  ]);
+  console.log('FFmpeg 로드 완료');
+
+  ffmpegInstance = ff;
+  return ff;
 }
 
 async function captureFrameToBlob(canvas, context) {
@@ -343,18 +365,30 @@ async function downloadTrimmedMp4() {
     const outputName = 'trimmed.mp4';
     const sourceData = new Uint8Array(await selectedVideoFile.arrayBuffer());
 
-    await ffmpeg.writeFile(inputName, sourceData);
+    console.time('writeFile');
+    await withTimeout(ffmpeg.writeFile(inputName, sourceData), 30000, '입력 파일 쓰기');
+    console.timeEnd('writeFile');
 
     const duration = Math.max(0.05, end - start);
-    await ffmpeg.exec([
-      '-ss', formatFfmpegTime(start),
-      '-i', inputName,
-      '-t', formatFfmpegTime(duration),
-      '-c', 'copy',
-      outputName
-    ]);
+    console.log('[trim]', { start, end, duration });
+    console.time('exec');
+    await withTimeout(
+      ffmpeg.exec([
+        '-ss', formatFfmpegTime(start),
+        '-i', inputName,
+        '-t', formatFfmpegTime(duration),
+        '-c', 'copy',
+        outputName
+      ]),
+      120000,
+      'MP4 자르기'
+    );
+    console.timeEnd('exec');
 
-    const outputData = await ffmpeg.readFile(outputName);
+    console.time('readFile');
+    const outputData = await withTimeout(ffmpeg.readFile(outputName), 30000, '출력 파일 읽기');
+    console.timeEnd('readFile');
+
     const blob = new Blob([outputData.buffer], { type: 'video/mp4' });
     const baseName = getSafeBaseName(fileName.textContent || 'trimmed');
     const suffix = `${Number(start).toFixed(2)}_${Number(end).toFixed(2)}`;
