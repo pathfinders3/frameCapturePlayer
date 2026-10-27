@@ -106,6 +106,42 @@
     font-size: 12px;
     color: var(--color-text-secondary);
   }
+  .trim-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 2px 0 6px;
+  }
+  .trim-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .trim-label {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
+  .trim-input {
+    width: 96px;
+    height: 38px;
+    padding: 0 12px;
+    border-radius: var(--border-radius-md);
+    border: 0.5px solid var(--color-border-secondary);
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    outline: none;
+  }
+  .trim-input:focus {
+    border-color: var(--color-text-secondary);
+  }
+  .trim-status {
+    min-height: 18px;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
   .ctrl-btn {
     display: flex;
     align-items: center;
@@ -190,6 +226,24 @@
       </button>
     </div>
     <div class="extract-status" id="extractStatus" aria-live="polite"></div>
+
+    <div class="trim-controls">
+      <div class="trim-field">
+        <span class="trim-label">시작</span>
+        <input class="trim-input" type="number" id="trimStartInput" min="0" step="0.1" value="0" aria-label="시작 초">
+        <button class="ctrl-btn" id="setTrimStartBtn">현재 시점 설정</button>
+      </div>
+      <div class="trim-field">
+        <span class="trim-label">끝</span>
+        <input class="trim-input" type="number" id="trimEndInput" min="0" step="0.1" value="0" aria-label="끝 초">
+        <button class="ctrl-btn" id="setTrimEndBtn">현재 시점 설정</button>
+      </div>
+      <button class="ctrl-btn" id="trimMp4Btn">
+        <i class="ti ti-scissors" style="font-size:16px;" aria-hidden="true"></i> 구간 MP4 다운로드
+      </button>
+    </div>
+    <div class="trim-status" id="trimStatus" aria-live="polite"></div>
+
     <video id="videoEl" preload="metadata"></video>
     <div class="progress-bar-wrap" id="progressWrap">
       <div class="progress-fill" id="progressFill"></div>
@@ -210,4 +264,5 @@
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
 <script src="./mp4_video_player.js"></script>

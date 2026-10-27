@@ -15,21 +15,34 @@ const startTimeInput = document.getElementById('startTimeInput');
 const relativeStartToggle = document.getElementById('relativeStartToggle');
 const extractFramesBtn = document.getElementById('extractFramesBtn');
 const extractStatus = document.getElementById('extractStatus');
+const trimStartInput = document.getElementById('trimStartInput');
+const trimEndInput = document.getElementById('trimEndInput');
+const setTrimStartBtn = document.getElementById('setTrimStartBtn');
+const setTrimEndBtn = document.getElementById('setTrimEndBtn');
+const trimMp4Btn = document.getElementById('trimMp4Btn');
+const trimStatus = document.getElementById('trimStatus');
 const progressFill = document.getElementById('progressFill');
 const progressWrap = document.getElementById('progressWrap');
 const timeDisplay = document.getElementById('timeDisplay');
 const fileName = document.getElementById('fileName');
 const framesToExtract = 10;
 let extractionInProgress = false;
+let trimInProgress = false;
+let selectedVideoFile = null;
+let ffmpegInstance = null;
 
 function loadFile(file) {
   if (!file || !file.type.startsWith('video/')) return;
+  selectedVideoFile = file;
   const url = URL.createObjectURL(file);
   videoEl.src = url;
   fileName.textContent = file.name;
   dropZone.classList.add('hidden');
   videoContainer.classList.add('visible');
   setExtractStatus('');
+  setTrimStatus('');
+  trimStartInput.value = '0';
+  trimEndInput.value = '0';
   setPlayState(false);
 }
 
@@ -64,6 +77,10 @@ function fmt(s) {
 
 function setExtractStatus(message) {
   extractStatus.textContent = message;
+}
+
+function setTrimStatus(message) {
+  trimStatus.textContent = message;
 }
 
 function getStepSeconds() {
@@ -115,6 +132,40 @@ function triggerDownload(blob, fileNameText) {
   anchor.download = fileNameText;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function toBlobUrl(url, mimeType) {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return URL.createObjectURL(new Blob([blob], { type: mimeType }));
+}
+
+function formatFfmpegTime(value) {
+  const totalSeconds = Math.max(0, Number(value) || 0);
+  const date = new Date(totalSeconds * 1000);
+  const iso = date.toISOString().slice(11, 23);
+  return iso === '00:00:00.000' ? '00:00:00.000' : iso;
+}
+
+async function ensureFfmpeg() {
+  if (ffmpegInstance) {
+    return ffmpegInstance;
+  }
+
+  const { FFmpeg } = window;
+  if (!FFmpeg) {
+    throw new Error('FFmpeg를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+
+  ffmpegInstance = new FFmpeg();
+  const coreBaseUrl = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
+
+  await ffmpegInstance.load({
+    coreURL: await toBlobUrl(`${coreBaseUrl}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await toBlobUrl(`${coreBaseUrl}/ffmpeg-core.wasm`, 'application/wasm')
+  });
+
+  return ffmpegInstance;
 }
 
 async function captureFrameToBlob(canvas, context) {
@@ -253,6 +304,70 @@ async function extractFramesBySeeking(stepFrames, startPosition) {
   return capturedCount;
 }
 
+async function downloadTrimmedMp4() {
+  if (!selectedVideoFile) {
+    setTrimStatus('먼저 비디오 파일을 선택해 주세요.');
+    return;
+  }
+
+  if (trimInProgress) {
+    return;
+  }
+
+  const start = Number.parseFloat(trimStartInput.value);
+  const end = Number.parseFloat(trimEndInput.value);
+
+  if (!Number.isFinite(start) || start < 0) {
+    setTrimStatus('시작 초는 0 이상의 숫자여야 합니다.');
+    return;
+  }
+
+  if (!Number.isFinite(end) || end <= start) {
+    setTrimStatus('끝 초는 시작 초보다 커야 합니다.');
+    return;
+  }
+
+  const maxDuration = Number.isFinite(videoEl.duration) ? videoEl.duration : Infinity;
+  if (end > maxDuration) {
+    setTrimStatus(`끝 초는 영상 길이(${fmt(maxDuration)})를 넘을 수 없습니다.`);
+    return;
+  }
+
+  trimInProgress = true;
+  trimMp4Btn.disabled = true;
+  setTrimStatus('구간을 MP4로 변환 중입니다...');
+
+  try {
+    const ffmpeg = await ensureFfmpeg();
+    const inputName = 'input.mp4';
+    const outputName = 'trimmed.mp4';
+    const sourceData = new Uint8Array(await selectedVideoFile.arrayBuffer());
+
+    await ffmpeg.writeFile(inputName, sourceData);
+
+    const duration = Math.max(0.05, end - start);
+    await ffmpeg.exec([
+      '-ss', formatFfmpegTime(start),
+      '-i', inputName,
+      '-t', formatFfmpegTime(duration),
+      '-c', 'copy',
+      outputName
+    ]);
+
+    const outputData = await ffmpeg.readFile(outputName);
+    const blob = new Blob([outputData.buffer], { type: 'video/mp4' });
+    const baseName = getSafeBaseName(fileName.textContent || 'trimmed');
+    const suffix = `${Number(start).toFixed(2)}_${Number(end).toFixed(2)}`;
+    triggerDownload(blob, `${baseName}_${suffix}.mp4`);
+    setTrimStatus('선택 구간을 MP4로 다운로드했습니다.');
+  } catch (error) {
+    setTrimStatus(error instanceof Error ? error.message : '구간 MP4 생성에 실패했습니다.');
+  } finally {
+    trimInProgress = false;
+    trimMp4Btn.disabled = false;
+  }
+}
+
 async function extractFrames() {
   if (extractionInProgress) {
     return;
@@ -315,6 +430,22 @@ extractFramesBtn.addEventListener('click', () => {
   void extractFrames();
 });
 
+setTrimStartBtn.addEventListener('click', () => {
+  if (!videoEl.src) return;
+  trimStartInput.value = Number(videoEl.currentTime).toFixed(3);
+  setTrimStatus('시작점을 현재 위치로 설정했습니다.');
+});
+
+setTrimEndBtn.addEventListener('click', () => {
+  if (!videoEl.src) return;
+  trimEndInput.value = Number(videoEl.currentTime).toFixed(3);
+  setTrimStatus('끝점을 현재 위치로 설정했습니다.');
+});
+
+trimMp4Btn.addEventListener('click', () => {
+  void downloadTrimmedMp4();
+});
+
 dropZone.addEventListener('dragover', e => {
   e.preventDefault();
   dropZone.style.background = 'var(--color-background-tertiary)';
@@ -371,6 +502,13 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     seek(delta, { preferFast: true });
   }
+});
+
+videoEl.addEventListener('loadedmetadata', () => {
+  const duration = Number.isFinite(videoEl.duration) ? videoEl.duration : 0;
+  trimStartInput.value = '0';
+  trimEndInput.value = duration > 0 ? duration.toFixed(3) : '0';
+  setTrimStatus('');
 });
 
 videoEl.addEventListener('ended', () => {
